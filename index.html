@@ -1,168 +1,421 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Textra — Inbox</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body,html { height:100%; margin:0; font-family: Arial; }
-    .app { display:flex; height:100vh; }
-    .left { width:260px; border-right:1px solid #ddd; padding:10px; overflow:auto; }
-    .center { flex:1; padding:10px; display:flex; flex-direction:column; }
-    .right { width:300px; border-left:1px solid #ddd; padding:10px; display:flex; flex-direction:column; }
-    .messages { flex:1; overflow:auto; border:1px solid #eee; padding:10px; margin-bottom:8px; white-space:pre-wrap; }
-    .inputbox { display:flex; }
-    .inputbox input { flex:1; padding:8px; }
-    .inputbox button { padding:8px; }
-    .profile-footer { margin-top:auto; }
-    .small { font-size:12px; color:#666; margin-top:6px; }
-    .conv-item { padding:6px; border-bottom:1px solid #f0f0f0; cursor:pointer; }
-    .conv-item:hover { background:#fafafa; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Textra — Inbox</title>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#f6f8fa;
+    --card:#ffffff;
+    --muted:#6b7280;
+    --accent:#4f46e5;
+    --accent-2:#7c3aed;
+    --border: #e6e9ef;
+    --success:#10b981;
+    --danger:#ef4444;
+    --glass: rgba(255,255,255,0.6);
+  }
+  *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#fbfdff 0%,var(--bg) 100%);color:#0f172a;}
+  .page{height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;background:transparent}
+  header .brand{display:flex;gap:12px;align-items:center}
+  .logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  .brand h1{margin:0;font-size:18px}
+  .brand p{margin:0;color:var(--muted);font-size:12px}
+
+  /* main layout: three equal columns */
+  .workspace{flex:1;display:flex;gap:18px;padding:18px;align-items:stretch}
+  .col{flex:1;min-width:0;display:flex;flex-direction:column}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(16,24,40,0.04);display:flex;flex-direction:column;height:100%}
+
+  /* left column - conversations */
+  .conversations { padding:6px 0; overflow:auto; }
+  .conv-item{display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:1px solid transparent}
+  .conv-item:hover{background:#fafbff;border-color:#f1f2ff}
+  .conv-left{display:flex;gap:10px;align-items:center}
+  .avatar{width:40px;height:40px;border-radius:8px;background:#eef2ff;color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:600}
+  .conv-meta{display:flex;flex-direction:column}
+  .conv-meta .name{font-weight:600}
+  .conv-meta .sub{font-size:12px;color:var(--muted)}
+
+  /* center chat */
+  .chat-header{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+  .messages{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+  .msg-row{max-width:80%;padding:10px;border-radius:10px}
+  .msg-out{align-self:flex-end;background:linear-gradient(90deg,#eef2ff,#e9f0ff);border:1px solid #e0e8ff}
+  .msg-in{align-self:flex-start;background:#f8f9fb;border:1px solid #eef0f5}
+  .msg-meta{font-size:11px;color:var(--muted);margin-top:6px}
+
+  .composer{display:flex;gap:8px;padding-top:10px;border-top:1px solid var(--border)}
+  .composer input[type="text"]{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);outline:none}
+  .composer button{padding:10px 14px;border-radius:10px;border:none;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;font-weight:600;cursor:pointer}
+
+  /* right profile */
+  .profile-row{display:flex;flex-direction:column;gap:8px}
+  .profile-card{display:flex;flex-direction:column;gap:6px}
+  .profile-top{display:flex;gap:12px;align-items:center}
+  .profile-top .avatar-lg{width:64px;height:64px;border-radius:12px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent)}
+  .kv{font-size:13px;color:var(--muted)}
+  .wallet{font-weight:700;font-size:18px}
+  .logout-btn{margin-top:auto;padding:10px;border-radius:10px;background:#fff;border:1px solid var(--border);cursor:pointer}
+
+  /* modal */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.35);display:flex;align-items:center;justify-content:center;z-index:80}
+  .modal{background:var(--card);padding:18px;border-radius:12px;width:420px;border:1px solid var(--border);box-shadow:0 10px 30px rgba(2,6,23,0.15)}
+  .modal h3{margin:0 0 12px 0}
+  .modal input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);margin-bottom:10px}
+
+  /* small responsive */
+  @media (max-width:900px){
+    .workspace{flex-direction:column;padding:12px}
+    .col{height:auto}
+  }
+</style>
 </head>
 <body>
-  <div style="padding:8px; background:#fafafa; border-bottom:1px solid #eee;">
-    <strong>Textra</strong> — demo UI &nbsp; 
-    <button id="btnLogin" style="margin-left:12px">Sign in</button>
-    <span class="small" style="margin-left:10px">Frontend hosted on GitHub Pages · Backend: https://textra.onrender.com</span>
+<div class="page">
+  <header>
+    <div class="brand">
+      <div class="logo">T</div>
+      <div>
+        <h1>Textra</h1>
+        <p>Virtual numbers • SMS inbox — Tech Talk Titans</p>
+      </div>
+    </div>
+    <div>
+      <small style="color:var(--muted)">Connected backend: <strong style="color:var(--accent)">https://textra.onrender.com</strong></small>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <!-- LEFT: Conversations -->
+    <div class="col">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong>Conversations</strong>
+          <button id="newConvBtn" style="border:none;background:transparent;color:var(--accent);cursor:pointer">New</button>
+        </div>
+        <div class="conversations" id="conversationsList">
+          <!-- conversation items injected here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER: Chat -->
+    <div class="col">
+      <div class="card">
+        <div class="chat-header">
+          <div><strong id="chatWith">Select a conversation</strong><div class="kv" id="chatMeta">—</div></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="kv">Status: <span id="connStatus" style="color:var(--muted)">idle</span></div>
+          </div>
+        </div>
+
+        <div class="messages" id="messagesPane">
+          <div style="text-align:center;color:var(--muted)">No conversation selected</div>
+        </div>
+
+        <div class="composer">
+          <input id="messageInput" type="text" placeholder="Type a message..." />
+          <button id="sendBtn" title="Send">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Profile / Wallet -->
+    <div class="col">
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="profile-row">
+          <div class="profile-top">
+            <div class="avatar-lg">T</div>
+            <div>
+              <div id="profileName" style="font-weight:700">Guest</div>
+              <div class="kv" id="profileEmail">—</div>
+            </div>
+          </div>
+
+          <div class="profile-card">
+            <div class="kv">Assigned number</div>
+            <div id="assignedNumber" style="font-weight:600">—</div>
+
+            <div class="kv" style="margin-top:8px">Wallet balance</div>
+            <div class="wallet" id="walletBalance">$0.00</div>
+
+            <div class="kv" style="margin-top:10px">Support</div>
+            <div class="kv">support@textra.io</div>
+          </div>
+        </div>
+
+        <button id="logoutBtn" class="logout-btn">Logout</button>
+      </div>
+    </div>
   </div>
+</div>
 
-  <div class="app">
-    <aside class="left">
-      <h3>Conversations</h3>
-      <div id="conversations">Loading…</div>
-    </aside>
-
-    <main class="center">
-      <div id="chatHeader"><strong>Choose a conversation</strong></div>
-      <div class="messages" id="messages"></div>
-      <div class="inputbox">
-        <input id="msgInput" placeholder="Write a message..." />
-        <button id="sendBtn">Send</button>
-      </div>
-    </main>
-
-    <aside class="right">
-      <div id="profile">
-        <h3 id="name">User</h3>
-        <div><strong>Assigned:</strong> <span id="assigned">—</span></div>
-        <div><strong>Wallet:</strong> $<span id="wallet">0.00</span></div>
-        <div class="small">To top-up or assign numbers, contact admin.</div>
-      </div>
-      <div class="profile-footer">
-        <button id="logout">Logout</button>
-      </div>
-    </aside>
+<!-- Login modal (required) -->
+<div id="loginModal" class="modal-backdrop" style="display:none">
+  <div class="modal">
+    <h3>Sign in to Textra</h3>
+    <input id="loginEmail" placeholder="Your email (must match account)" />
+    <input id="loginName" placeholder="Display name (optional)" />
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button id="loginCancel" style="background:transparent;border:1px solid var(--border);padding:8px;border-radius:8px">Cancel</button>
+      <button id="loginSubmit" style="background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;border:none;padding:8px 12px;border-radius:8px">Sign in</button>
+    </div>
   </div>
+</div>
 
-  <script>
-    // Change this to your Render backend URL if different
-    const API_BASE = "https://textra.onrender.com";
+<script>
+/* ----------------- CONFIG ----------------- */
+const API_BASE = "https://textra.onrender.com"; // your Render backend
+const COST_PER_SMS_CENTS = 8;
 
-    // active user (changes via Sign in prompt)
-    let email = localStorage.getItem('textra_email') || 'demo@example.com';
+/* ------------- app state -------------- */
+let state = {
+  email: localStorage.getItem('textra_email') || '',
+  display_name: localStorage.getItem('textra_name') || '',
+  profile: null,
+  conversations: [], // {id, contact_number, last_message_at}
+  messages: {}, // conversation_id => [messages]
+  selectedConversation: null
+};
 
-    // --- basic UI helpers ---
-    function setProfileUI(profile, wallet_cents) {
-      document.getElementById('name').innerText = profile.display_name || profile.email;
-      document.getElementById('assigned').innerText = (profile.assigned_numbers || []).join(', ');
-      document.getElementById('wallet').innerText = (wallet_cents/100).toFixed(2);
-    }
+/* ------------- DOM refs -------------- */
+const loginModal = document.getElementById('loginModal');
+const loginEmail = document.getElementById('loginEmail');
+const loginName = document.getElementById('loginName');
+const msgInput = document.getElementById('messageInput');
+const messagesPane = document.getElementById('messagesPane');
+const convListEl = document.getElementById('conversationsList');
+const profileNameEl = document.getElementById('profileName');
+const profileEmailEl = document.getElementById('profileEmail');
+const assignedNumberEl = document.getElementById('assignedNumber');
+const walletBalanceEl = document.getElementById('walletBalance');
+const chatWithEl = document.getElementById('chatWith');
+const chatMetaEl = document.getElementById('chatMeta');
+const connStatusEl = document.getElementById('connStatus');
 
-    function showConversations(list) {
-      const el = document.getElementById('conversations');
-      el.innerHTML = '';
-      if (!list || list.length === 0) { el.innerText = 'No conversations yet'; return; }
-      list.forEach(c => {
-        const d = document.createElement('div');
-        d.className = 'conv-item';
-        d.innerText = `${c.contact_number} — last: ${c.last_message_at || '—'}`;
-        d.onclick = () => loadMessages(c.id, c.contact_number);
-        el.appendChild(d);
-      });
-    }
+/* ------------- UI helpers -------------- */
+function showLoginModal() {
+  loginModal.style.display = 'flex';
+  loginEmail.value = state.email || '';
+  loginName.value = state.display_name || '';
+}
+function hideLoginModal(){ loginModal.style.display = 'none'; }
+function setStatus(s){ connStatusEl.innerText = s; }
 
-    function showMessages(rows) {
-      const el = document.getElementById('messages');
-      el.innerHTML = '';
-      rows.forEach(m => {
-        const d = document.createElement('div');
-        d.innerHTML = `${m.created_at} <strong>${m.direction}</strong> ${m.from_number} → ${m.to_number}<div>${m.body}</div><hr/>`;
-        el.appendChild(d);
-      });
-    }
+/* render conversations */
+function renderConversations(){
+  convListEl.innerHTML = '';
+  if(!state.conversations.length){
+    convListEl.innerHTML = '<div class="kv">No conversations</div>';
+    return;
+  }
+  state.conversations.forEach(c=>{
+    const d = document.createElement('div');
+    d.className = 'conv-item';
+    d.innerHTML = `<div class="conv-left"><div class="avatar">${(c.contact_number||'--').slice(-2)}</div><div class="conv-meta"><div class="name">${c.contact_number}</div><div class="sub">${c.last_message_at||''}</div></div></div><div class="kv">›</div>`;
+    d.onclick = ()=> selectConversation(c.id);
+    convListEl.appendChild(d);
+  });
+}
 
-    // --- API calls ---
-    async function loadProfile() {
-      try {
-        const res = await fetch(`${API_BASE}/api/profile/${encodeURIComponent(email)}`);
-        if (!res.ok) throw new Error('Profile fetch failed');
-        const j = await res.json();
-        setProfileUI(j.profile, j.wallet_cents);
-        // load conversations for this user
-        await loadConversations();
-      } catch (err) {
-        console.error(err);
-        alert('Unable to load profile. Check console.');
-      }
-    }
+/* render messages for selected conversation */
+function renderMessages(convId){
+  const list = state.messages[convId] || [];
+  messagesPane.innerHTML = '';
+  if(!list.length){
+    messagesPane.innerHTML = '<div style="text-align:center;color:var(--muted)">No messages yet</div>';
+    return;
+  }
+  list.forEach(m=>{
+    const row = document.createElement('div');
+    row.className = 'msg-row ' + (m.direction === 'outbound' ? 'msg-out' : 'msg-in');
+    row.innerHTML = `<div>${escapeHtml(m.body)}</div><div class="msg-meta">${m.created_at || ''} · ${m.status||''}</div>`;
+    messagesPane.appendChild(row);
+  });
+  messagesPane.scrollTop = messagesPane.scrollHeight;
+}
 
-    async function loadConversations() {
-      // simple call to fetch sheet data: reuse /api/profile to find email owner and then call a lightweight endpoint if you implement it.
-      // For now we'll try to fetch conversations via a simple endpoint (not implemented) or show placeholder.
-      // If you implement GET /api/conversations, replace below with that call.
-      document.getElementById('conversations').innerHTML = '<div class="small">Conversation list will appear here</div>';
-    }
+/* basic HTML escape */
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-    async function loadMessages(conversation_id, contact_number) {
-      // If you implement GET /api/conversations/:id/messages, call it here.
-      // Fallback: show placeholder
-      document.getElementById('chatHeader').innerHTML = `<strong>${contact_number}</strong>`;
-      document.getElementById('messages').innerHTML = '<div class="small">Messages for conversation loading (not implemented)</div>';
-    }
-
-    async function sendMessage(from, to, text) {
-      try {
-        const res = await fetch(`${API_BASE}/api/send`, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ email, from, to, text })
-        });
-        const j = await res.json();
-        return j;
-      } catch (err) {
-        console.error('Send failed', err);
-        return { error: 'send_failed', detail: String(err) };
-      }
-    }
-
-    // --- UI actions ---
-    document.getElementById('sendBtn').addEventListener('click', async ()=>{
-      const text = document.getElementById('msgInput').value.trim();
-      const from = document.getElementById('assigned').innerText.split(',')[0] || '';
-      const to = prompt('Send to number (+1...)');
-      if(!from || !to || !text) return alert('missing fields');
-      const r = await sendMessage(from, to, text);
-      alert(JSON.stringify(r));
-      loadProfile();
+/* ------------- API calls -------------- */
+async function apiSignup(email, display_name=''){
+  const res = await fetch(`${API_BASE}/api/signup`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ email, display_name })
+  });
+  return res.json();
+}
+async function apiProfile(email){
+  const res = await fetch(`${API_BASE}/api/profile/${encodeURIComponent(email)}`);
+  if(!res.ok) throw new Error('profile fetch failed');
+  return res.json();
+}
+async function apiConversations(email){
+  // backend doesn't have /api/conversations GET in prototype,
+  // so we build conversations from messages sheet if you implement it later.
+  // For now, try a lightweight endpoint (not implemented) or read placeholder.
+  // We'll return empty array if missing.
+  try{
+    const res = await fetch(`${API_BASE}/api/conversations?email=${encodeURIComponent(email)}`);
+    if(!res.ok) return [];
+    const j = await res.json();
+    return j.conversations || [];
+  }catch(e){
+    return []; // fallback
+  }
+}
+async function apiGetMessages(conversation_id){
+  try{
+    const res = await fetch(`${API_BASE}/api/conversations/${encodeURIComponent(conversation_id)}/messages`);
+    if(!res.ok) return [];
+    const j = await res.json();
+    return j.messages || [];
+  }catch(e){
+    return [];
+  }
+}
+async function apiSend(email, from, to, text){
+  try{
+    const res = await fetch(`${API_BASE}/api/send`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, from, to, text })
     });
+    return res.json();
+  }catch(e){
+    return { error:'network', detail:String(e) };
+  }
+}
 
-    document.getElementById('btnLogin').addEventListener('click', async ()=>{
-      const e = prompt('Enter email to sign in', email);
-      if(!e) return;
-      email = e.trim();
-      localStorage.setItem('textra_email', email);
-      await loadProfile();
-    });
+/* ------------- app logic -------------- */
+async function doLogin(email, display_name){
+  setStatus('signing in');
+  try{
+    // try signup (idempotent)
+    await apiSignup(email, display_name);
+    state.email = email;
+    state.display_name = display_name || '';
+    localStorage.setItem('textra_email', email);
+    localStorage.setItem('textra_name', display_name || '');
+    await refreshProfile();
+    hideLoginModal();
+    setStatus('ready');
+  }catch(e){
+    console.error(e);
+    alert('Login failed: ' + e.message);
+    setStatus('error');
+  }
+}
 
-    document.getElementById('logout').addEventListener('click', ()=>{
-      localStorage.removeItem('textra_email');
-      email = '';
-      alert('Logged out. Refresh and sign in again.');
-    });
+async function refreshProfile(){
+  if(!state.email) return;
+  setStatus('loading profile');
+  try{
+    const j = await apiProfile(state.email);
+    state.profile = j.profile;
+    profileNameEl.innerText = state.profile.display_name || state.profile.email;
+    profileEmailEl.innerText = state.profile.email;
+    const assigned = (state.profile.assigned_numbers || []).filter(Boolean);
+    assignedNumberEl.innerText = assigned.length ? assigned[0] : '—';
+    walletBalanceEl.innerText = '$' + ((j.wallet_cents||0)/100).toFixed(2);
+    // load convs (best-effort)
+    state.conversations = await apiConversations(state.email);
+    renderConversations();
+  }catch(e){
+    console.error(e);
+    setStatus('error');
+  }
+}
 
-    // init
-    loadProfile();
-  </script>
+/* select conversation */
+async function selectConversation(convId){
+  state.selectedConversation = convId;
+  chatWithEl.innerText = convId;
+  chatMetaEl.innerText = '';
+  setStatus('loading messages');
+  const msgs = await apiGetMessages(convId);
+  state.messages[convId] = msgs;
+  renderMessages(convId);
+  setStatus('ready');
+}
+
+/* send message from composer */
+document.getElementById('sendBtn').addEventListener('click', async ()=>{
+  const text = msgInput.value.trim();
+  if(!text) return alert('Type a message.');
+  const from = assignedNumberEl.innerText;
+  const to = prompt('Send to number (+1...)');
+  if(!to) return;
+  setStatus('sending');
+  const res = await apiSend(state.email, from, to, text);
+  if(res && res.ok){
+    msgInput.value = '';
+    // append locally (optimistic)
+    const convId = res.msgid || `out-${Date.now()}`;
+    state.messages[convId] = state.messages[convId] || [];
+    state.messages[convId].push({ body:text, direction:'outbound', status:res.ok?'sent':'queued', created_at: new Date().toISOString() });
+    renderMessages(convId);
+    await refreshProfile();
+  } else {
+    alert('Send failed: ' + (res.error || JSON.stringify(res)));
+    // if error contains refund, refresh profile
+    await refreshProfile();
+  }
+  setStatus('ready');
+});
+
+/* new conv button - just prompt and create placeholder */
+document.getElementById('newConvBtn').addEventListener('click', ()=>{
+  const num = prompt('Enter contact number (+1...)');
+  if(!num) return;
+  // create a temporary conv object; in production you'd call an API
+  const id = 'conv-' + Date.now();
+  const conv = { id, contact_number: num, last_message_at: new Date().toISOString() };
+  state.conversations.unshift(conv);
+  renderConversations();
+  selectConversation(id);
+});
+
+/* logout */
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  localStorage.removeItem('textra_email');
+  localStorage.removeItem('textra_name');
+  state.email = '';
+  state.profile = null;
+  profileNameEl.innerText = 'Guest';
+  profileEmailEl.innerText = '—';
+  assignedNumberEl.innerText = '—';
+  walletBalanceEl.innerText = '$0.00';
+  showLogin();
+});
+
+/* login modal buttons */
+document.getElementById('loginSubmit').addEventListener('click', async ()=>{
+  const e = loginEmail.value && loginEmail.value.trim();
+  const n = loginName.value && loginName.value.trim();
+  if(!e) return alert('Email is required');
+  await doLogin(e, n);
+});
+document.getElementById('loginCancel').addEventListener('click', ()=>{ hideLoginModal(); });
+
+/* show login if not logged in */
+function showLogin(){
+  showLoginModal();
+  setStatus('login required');
+}
+if(!state.email){
+  showLogin();
+} else {
+  doLogin(state.email, state.display_name);
+}
+</script>
 </body>
 </html>
