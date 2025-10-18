@@ -1,1 +1,74 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Textra — Inbox</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body,html { height:100%; margin:0; font-family: Arial; }
+    .app { display:flex; height:100vh; }
+    .left { width:260px; border-right:1px solid #ddd; padding:10px; overflow:auto; }
+    .center { flex:1; padding:10px; display:flex; flex-direction:column; }
+    .right { width:300px; border-left:1px solid #ddd; padding:10px; display:flex; flex-direction:column; }
+    .messages { flex:1; overflow:auto; border:1px solid #eee; padding:10px; margin-bottom:8px; }
+    .inputbox { display:flex; }
+    .inputbox input { flex:1; padding:8px; }
+    .inputbox button { padding:8px; }
+    .profile-footer { margin-top:auto; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="left">
+      <h3>Conversations</h3>
+      <div id="conversations">Loading…</div>
+    </aside>
+
+    <main class="center">
+      <div id="chatHeader"><strong>Choose a conversation</strong></div>
+      <div class="messages" id="messages"></div>
+      <div class="inputbox">
+        <input id="msgInput" placeholder="Write a message..." />
+        <button id="sendBtn">Send</button>
+      </div>
+    </main>
+
+    <aside class="right">
+      <div id="profile">
+        <h3 id="name">User</h3>
+        <div><strong>Assigned:</strong> <span id="assigned">—</span></div>
+        <div><strong>Wallet:</strong> $<span id="wallet">0.00</span></div>
+      </div>
+      <div class="profile-footer">
+        <button id="logout">Logout</button>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const email = 'demo@example.com';
+    async function loadProfile(){
+      const r = await fetch('/api/profile/' + encodeURIComponent(email));
+      const j = await r.json();
+      if(j.profile){
+        document.getElementById('name').innerText = j.profile.display_name || email;
+        document.getElementById('assigned').innerText = (j.profile.assigned_numbers || []).join(', ');
+        document.getElementById('wallet').innerText = (j.wallet_cents/100).toFixed(2);
+      }
+    }
+    loadProfile();
+
+    document.getElementById('sendBtn').addEventListener('click', async ()=>{
+      const text = document.getElementById('msgInput').value;
+      const from = document.getElementById('assigned').innerText.split(',')[0] || '';
+      const to = prompt('Send to number (+1...)');
+      if(!from || !to || !text) return alert('missing');
+      const res = await fetch('/api/send', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, from, to, text})});
+      const data = await res.json();
+      alert(JSON.stringify(data));
+      loadProfile();
+    });
+  </script>
+</body>
+</html>
 
