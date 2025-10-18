@@ -18,7 +18,6 @@
     --border: #e6e9ef;
     --success:#10b981;
     --danger:#ef4444;
-    --glass: rgba(255,255,255,0.6);
   }
   *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
   html,body{height:100%;margin:0;background:linear-gradient(180deg,#fbfdff 0%,var(--bg) 100%);color:#0f172a;}
@@ -162,12 +161,15 @@
 <div id="loginModal" class="modal-backdrop" style="display:none">
   <div class="modal">
     <h3>Sign in to Textra</h3>
-    <input id="loginEmail" placeholder="Your email (must match account)" />
-    <input id="loginName" placeholder="Display name (optional)" />
+    <input id="loginEmail" placeholder="Email" autocomplete="username" />
+    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
+    <input id="loginName" placeholder="Display name (optional for signup)" style="display:block;margin-top:8px" />
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
       <button id="loginCancel" style="background:transparent;border:1px solid var(--border);padding:8px;border-radius:8px">Cancel</button>
+      <button id="loginSignup" style="background:transparent;border:1px solid var(--border);padding:8px;border-radius:8px">Sign up</button>
       <button id="loginSubmit" style="background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;border:none;padding:8px 12px;border-radius:8px">Sign in</button>
     </div>
+    <div style="margin-top:8px;font-size:12px;color:var(--muted)">Passwords are stored securely (hashed) on the server.</div>
   </div>
 </div>
 
@@ -189,6 +191,7 @@ let state = {
 /* ------------- DOM refs -------------- */
 const loginModal = document.getElementById('loginModal');
 const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
 const loginName = document.getElementById('loginName');
 const msgInput = document.getElementById('messageInput');
 const messagesPane = document.getElementById('messagesPane');
@@ -206,6 +209,7 @@ function showLoginModal() {
   loginModal.style.display = 'flex';
   loginEmail.value = state.email || '';
   loginName.value = state.display_name || '';
+  loginPassword.value = '';
 }
 function hideLoginModal(){ loginModal.style.display = 'none'; }
 function setStatus(s){ connStatusEl.innerText = s; }
@@ -247,12 +251,19 @@ function renderMessages(convId){
 function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 /* ------------- API calls -------------- */
-async function apiSignup(email, display_name=''){
+async function apiSignup(email, display_name='', password){
   const res = await fetch(`${API_BASE}/api/signup`, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ email, display_name })
+    body: JSON.stringify({ email, display_name, password })
   });
   return res.json();
+}
+async function apiLogin(email, password){
+  const res = await fetch(`${API_BASE}/api/login`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ email, password })
+  });
+  return { ok: res.ok, body: await res.json() };
 }
 async function apiProfile(email){
   const res = await fetch(`${API_BASE}/api/profile/${encodeURIComponent(email)}`);
@@ -260,17 +271,13 @@ async function apiProfile(email){
   return res.json();
 }
 async function apiConversations(email){
-  // backend doesn't have /api/conversations GET in prototype,
-  // so we build conversations from messages sheet if you implement it later.
-  // For now, try a lightweight endpoint (not implemented) or read placeholder.
-  // We'll return empty array if missing.
   try{
     const res = await fetch(`${API_BASE}/api/conversations?email=${encodeURIComponent(email)}`);
     if(!res.ok) return [];
     const j = await res.json();
     return j.conversations || [];
   }catch(e){
-    return []; // fallback
+    return [];
   }
 }
 async function apiGetMessages(conversation_id){
@@ -296,21 +303,46 @@ async function apiSend(email, from, to, text){
 }
 
 /* ------------- app logic -------------- */
-async function doLogin(email, display_name){
+async function doLogin(email, display_name, password){
   setStatus('signing in');
   try{
-    // try signup (idempotent)
-    await apiSignup(email, display_name);
-    state.email = email;
-    state.display_name = display_name || '';
-    localStorage.setItem('textra_email', email);
-    localStorage.setItem('textra_name', display_name || '');
-    await refreshProfile();
-    hideLoginModal();
-    setStatus('ready');
+    // call login endpoint (if user doesn't exist, prompt signup)
+    const result = await apiLogin(email, password);
+    if(result.ok && result.body && result.body.ok){
+      state.email = email;
+      state.display_name = result.body.profile.display_name || display_name || '';
+      localStorage.setItem('textra_email', state.email);
+      localStorage.setItem('textra_name', state.display_name || '');
+      hideLoginModal();
+      await refreshProfile();
+      setStatus('ready');
+      return;
+    }
+    // if login failed because user not found, offer signup
+    const err = result.body || {};
+    if(err.error === 'not_found'){
+      const go = confirm('No account found. Create one with this email & password?');
+      if(go){
+        const s = await apiSignup(email, display_name || '', password);
+        if(s && s.ok){
+          state.email = email;
+          state.display_name = display_name || '';
+          localStorage.setItem('textra_email', state.email);
+          localStorage.setItem('textra_name', state.display_name || '');
+          hideLoginModal();
+          await refreshProfile();
+          setStatus('ready');
+          return;
+        } else {
+          alert('Signup failed: ' + (s.error || JSON.stringify(s)));
+        }
+      }
+    } else {
+      alert('Login failed: ' + (err.error || JSON.stringify(err)));
+    }
   }catch(e){
     console.error(e);
-    alert('Login failed: ' + e.message);
+    alert('Login error: ' + e.message);
     setStatus('error');
   }
 }
@@ -326,9 +358,9 @@ async function refreshProfile(){
     const assigned = (state.profile.assigned_numbers || []).filter(Boolean);
     assignedNumberEl.innerText = assigned.length ? assigned[0] : '—';
     walletBalanceEl.innerText = '$' + ((j.wallet_cents||0)/100).toFixed(2);
-    // load convs (best-effort)
     state.conversations = await apiConversations(state.email);
     renderConversations();
+    setStatus('ready');
   }catch(e){
     console.error(e);
     setStatus('error');
@@ -358,7 +390,6 @@ document.getElementById('sendBtn').addEventListener('click', async ()=>{
   const res = await apiSend(state.email, from, to, text);
   if(res && res.ok){
     msgInput.value = '';
-    // append locally (optimistic)
     const convId = res.msgid || `out-${Date.now()}`;
     state.messages[convId] = state.messages[convId] || [];
     state.messages[convId].push({ body:text, direction:'outbound', status:res.ok?'sent':'queued', created_at: new Date().toISOString() });
@@ -366,7 +397,6 @@ document.getElementById('sendBtn').addEventListener('click', async ()=>{
     await refreshProfile();
   } else {
     alert('Send failed: ' + (res.error || JSON.stringify(res)));
-    // if error contains refund, refresh profile
     await refreshProfile();
   }
   setStatus('ready');
@@ -376,7 +406,6 @@ document.getElementById('sendBtn').addEventListener('click', async ()=>{
 document.getElementById('newConvBtn').addEventListener('click', ()=>{
   const num = prompt('Enter contact number (+1...)');
   if(!num) return;
-  // create a temporary conv object; in production you'd call an API
   const id = 'conv-' + Date.now();
   const conv = { id, contact_number: num, last_message_at: new Date().toISOString() };
   state.conversations.unshift(conv);
@@ -399,10 +428,29 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
 
 /* login modal buttons */
 document.getElementById('loginSubmit').addEventListener('click', async ()=>{
-  const e = loginEmail.value && loginEmail.value.trim();
-  const n = loginName.value && loginName.value.trim();
-  if(!e) return alert('Email is required');
-  await doLogin(e, n);
+  const e = (loginEmail.value || '').trim().toLowerCase();
+  const p = (loginPassword.value || '');
+  const n = (loginName.value || '').trim();
+  if(!e || !p) return alert('Email and password required');
+  await doLogin(e, n, p);
+});
+document.getElementById('loginSignup').addEventListener('click', async ()=>{
+  const e = (loginEmail.value || '').trim().toLowerCase();
+  const p = (loginPassword.value || '');
+  const n = (loginName.value || '').trim();
+  if(!e || !p) return alert('Email and password required for signup');
+  const s = await apiSignup(e, n, p);
+  if(s && s.ok){
+    alert('Account created. You are now signed in.');
+    state.email = e;
+    state.display_name = n || '';
+    localStorage.setItem('textra_email', state.email);
+    localStorage.setItem('textra_name', state.display_name || '');
+    hideLoginModal();
+    await refreshProfile();
+  } else {
+    alert('Signup failed: ' + (s.error || JSON.stringify(s)));
+  }
 });
 document.getElementById('loginCancel').addEventListener('click', ()=>{ hideLoginModal(); });
 
@@ -414,7 +462,8 @@ function showLogin(){
 if(!state.email){
   showLogin();
 } else {
-  doLogin(state.email, state.display_name);
+  // try refresh (useful after page reload)
+  refreshProfile();
 }
 </script>
 </body>
