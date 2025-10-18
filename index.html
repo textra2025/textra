@@ -10,14 +10,23 @@
     .left { width:260px; border-right:1px solid #ddd; padding:10px; overflow:auto; }
     .center { flex:1; padding:10px; display:flex; flex-direction:column; }
     .right { width:300px; border-left:1px solid #ddd; padding:10px; display:flex; flex-direction:column; }
-    .messages { flex:1; overflow:auto; border:1px solid #eee; padding:10px; margin-bottom:8px; }
+    .messages { flex:1; overflow:auto; border:1px solid #eee; padding:10px; margin-bottom:8px; white-space:pre-wrap; }
     .inputbox { display:flex; }
     .inputbox input { flex:1; padding:8px; }
     .inputbox button { padding:8px; }
     .profile-footer { margin-top:auto; }
+    .small { font-size:12px; color:#666; margin-top:6px; }
+    .conv-item { padding:6px; border-bottom:1px solid #f0f0f0; cursor:pointer; }
+    .conv-item:hover { background:#fafafa; }
   </style>
 </head>
 <body>
+  <div style="padding:8px; background:#fafafa; border-bottom:1px solid #eee;">
+    <strong>Textra</strong> — demo UI &nbsp; 
+    <button id="btnLogin" style="margin-left:12px">Sign in</button>
+    <span class="small" style="margin-left:10px">Frontend hosted on GitHub Pages · Backend: https://textra.onrender.com</span>
+  </div>
+
   <div class="app">
     <aside class="left">
       <h3>Conversations</h3>
@@ -38,6 +47,7 @@
         <h3 id="name">User</h3>
         <div><strong>Assigned:</strong> <span id="assigned">—</span></div>
         <div><strong>Wallet:</strong> $<span id="wallet">0.00</span></div>
+        <div class="small">To top-up or assign numbers, contact admin.</div>
       </div>
       <div class="profile-footer">
         <button id="logout">Logout</button>
@@ -46,29 +56,113 @@
   </div>
 
   <script>
-    const email = 'demo@example.com';
-    async function loadProfile(){
-      const r = await fetch('/api/profile/' + encodeURIComponent(email));
-      const j = await r.json();
-      if(j.profile){
-        document.getElementById('name').innerText = j.profile.display_name || email;
-        document.getElementById('assigned').innerText = (j.profile.assigned_numbers || []).join(', ');
-        document.getElementById('wallet').innerText = (j.wallet_cents/100).toFixed(2);
+    // Change this to your Render backend URL if different
+    const API_BASE = "https://textra.onrender.com";
+
+    // active user (changes via Sign in prompt)
+    let email = localStorage.getItem('textra_email') || 'demo@example.com';
+
+    // --- basic UI helpers ---
+    function setProfileUI(profile, wallet_cents) {
+      document.getElementById('name').innerText = profile.display_name || profile.email;
+      document.getElementById('assigned').innerText = (profile.assigned_numbers || []).join(', ');
+      document.getElementById('wallet').innerText = (wallet_cents/100).toFixed(2);
+    }
+
+    function showConversations(list) {
+      const el = document.getElementById('conversations');
+      el.innerHTML = '';
+      if (!list || list.length === 0) { el.innerText = 'No conversations yet'; return; }
+      list.forEach(c => {
+        const d = document.createElement('div');
+        d.className = 'conv-item';
+        d.innerText = `${c.contact_number} — last: ${c.last_message_at || '—'}`;
+        d.onclick = () => loadMessages(c.id, c.contact_number);
+        el.appendChild(d);
+      });
+    }
+
+    function showMessages(rows) {
+      const el = document.getElementById('messages');
+      el.innerHTML = '';
+      rows.forEach(m => {
+        const d = document.createElement('div');
+        d.innerHTML = `${m.created_at} <strong>${m.direction}</strong> ${m.from_number} → ${m.to_number}<div>${m.body}</div><hr/>`;
+        el.appendChild(d);
+      });
+    }
+
+    // --- API calls ---
+    async function loadProfile() {
+      try {
+        const res = await fetch(`${API_BASE}/api/profile/${encodeURIComponent(email)}`);
+        if (!res.ok) throw new Error('Profile fetch failed');
+        const j = await res.json();
+        setProfileUI(j.profile, j.wallet_cents);
+        // load conversations for this user
+        await loadConversations();
+      } catch (err) {
+        console.error(err);
+        alert('Unable to load profile. Check console.');
       }
     }
-    loadProfile();
 
+    async function loadConversations() {
+      // simple call to fetch sheet data: reuse /api/profile to find email owner and then call a lightweight endpoint if you implement it.
+      // For now we'll try to fetch conversations via a simple endpoint (not implemented) or show placeholder.
+      // If you implement GET /api/conversations, replace below with that call.
+      document.getElementById('conversations').innerHTML = '<div class="small">Conversation list will appear here</div>';
+    }
+
+    async function loadMessages(conversation_id, contact_number) {
+      // If you implement GET /api/conversations/:id/messages, call it here.
+      // Fallback: show placeholder
+      document.getElementById('chatHeader').innerHTML = `<strong>${contact_number}</strong>`;
+      document.getElementById('messages').innerHTML = '<div class="small">Messages for conversation loading (not implemented)</div>';
+    }
+
+    async function sendMessage(from, to, text) {
+      try {
+        const res = await fetch(`${API_BASE}/api/send`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ email, from, to, text })
+        });
+        const j = await res.json();
+        return j;
+      } catch (err) {
+        console.error('Send failed', err);
+        return { error: 'send_failed', detail: String(err) };
+      }
+    }
+
+    // --- UI actions ---
     document.getElementById('sendBtn').addEventListener('click', async ()=>{
-      const text = document.getElementById('msgInput').value;
+      const text = document.getElementById('msgInput').value.trim();
       const from = document.getElementById('assigned').innerText.split(',')[0] || '';
       const to = prompt('Send to number (+1...)');
-      if(!from || !to || !text) return alert('missing');
-      const res = await fetch('/api/send', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, from, to, text})});
-      const data = await res.json();
-      alert(JSON.stringify(data));
+      if(!from || !to || !text) return alert('missing fields');
+      const r = await sendMessage(from, to, text);
+      alert(JSON.stringify(r));
       loadProfile();
     });
+
+    document.getElementById('btnLogin').addEventListener('click', async ()=>{
+      const e = prompt('Enter email to sign in', email);
+      if(!e) return;
+      email = e.trim();
+      localStorage.setItem('textra_email', email);
+      await loadProfile();
+    });
+
+    document.getElementById('logout').addEventListener('click', ()=>{
+      localStorage.removeItem('textra_email');
+      email = '';
+      alert('Logged out. Refresh and sign in again.');
+    });
+
+    // init
+    loadProfile();
   </script>
 </body>
 </html>
-
