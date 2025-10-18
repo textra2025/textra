@@ -1,1 +1,6 @@
+__pycache__/
+*.pyc
+instance/
+.env
+google_sa.json
 
